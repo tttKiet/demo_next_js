@@ -2,9 +2,9 @@
 import axios from "axios";
 import { CldImage } from "next-cloudinary";
 import { useRouter } from "next/router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Spinner from "./Spinner";
-import { ReactSortable, Sortable, MultiDrag } from "react-sortablejs";
+import { ReactSortable } from "react-sortablejs";
 
 function ProductForm({
   _id,
@@ -12,12 +12,19 @@ function ProductForm({
   description: existingDescription,
   price: existingPrice,
   images: existingImages,
+  category: existingCategory,
+  properties: existingProperties,
 }) {
   const [title, setTitle] = useState(existingTitle || "");
   const [description, setDescription] = useState(existingDescription || "");
   const [price, setPrice] = useState(existingPrice || "");
   const [images, setImages] = useState(existingImages || []);
+  const [category, setCategory] = useState(existingCategory || "");
   const [isUploading, setIsUploading] = useState(false);
+  const [productProperties, setProductProperties] = useState(
+    existingProperties || {}
+  );
+  const [categories, setCategories] = useState([]);
   const router = useRouter();
 
   const uploadImages = async (ev) => {
@@ -39,7 +46,6 @@ function ProductForm({
   };
 
   const updateImagesOrder = (images) => {
-    console.log("---------------------/images ", images);
     setImages(images);
   };
 
@@ -50,6 +56,8 @@ function ProductForm({
       description,
       price,
       images,
+      category,
+      properties: productProperties,
     };
     if (_id) {
       // Update
@@ -65,6 +73,32 @@ function ProductForm({
       }
     }
   };
+
+  function setProductProp(propName, value) {
+    setProductProperties((prev) => {
+      const newProductProps = { ...prev };
+      newProductProps[propName] = value;
+      return newProductProps;
+    });
+  }
+
+  const propertiesToFill = [];
+  if (categories.length > 0 && category) {
+    let catInfo = categories.find(({ _id }) => _id === category);
+    propertiesToFill.push(...catInfo.properties);
+    while (catInfo?.parent?._id) {
+      const parentCat = categories.find(
+        ({ _id }) => _id === catInfo?.parent?._id
+      );
+      propertiesToFill.push(...parentCat.properties);
+      catInfo = parentCat;
+    }
+  }
+
+  useEffect(() => {
+    axios.get("/api/categories").then((result) => setCategories(result.data));
+  }, []);
+
   return (
     <form onSubmit={saveProduct}>
       <div>
@@ -76,6 +110,41 @@ function ProductForm({
           value={title}
           onChange={(ev) => setTitle(ev.target.value)}
         />
+      </div>
+
+      <div>
+        <label htmlFor="productName">Category</label>
+
+        {console.log("product prop: ", productProperties)}
+        <select
+          value={category}
+          onChange={(ev) => setCategory(ev.target.value)}
+        >
+          <option value="">Uncategoried</option>
+          {categories.map((category) => (
+            <option key={category._id} value={category._id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        {propertiesToFill.length > 0 &&
+          propertiesToFill.map((p, index) => (
+            <div key={index} className="flex gap-1">
+              <div>{p.name}</div>
+              <select
+                value={productProperties[p.name]}
+                onChange={(ev) => setProductProp(p.name, ev.target.value)}
+              >
+                {p.values.map((v, index) => (
+                  <option value={v} key={index}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
       </div>
 
       <div>
@@ -145,6 +214,7 @@ function ProductForm({
           onChange={(ev) => setDescription(ev.target.value)}
         ></textarea>
       </div>
+
       <div>
         <label htmlFor="price"> Price (in USD)</label>
         <input
@@ -155,6 +225,7 @@ function ProductForm({
           onChange={(ev) => setPrice(ev.target.value)}
         />
       </div>
+
       <button type="submit" className="btn-primary">
         {_id ? "Update" : "Create"}
       </button>
